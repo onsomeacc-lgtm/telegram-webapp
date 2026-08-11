@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+  <meta name="theme-color" content="#111111">
+  <title>Interactive Telegram Web App</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root { --vh: 1vh; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin:0; width:100%; height:100%; overflow:hidden; background:#111; }
+    body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; color:#fff; }
+    #app { position:fixed; inset:0; overflow:hidden; background:#111; }
+    .screen { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+    .story { touch-action:none; user-select:none; }
+    .scene {
+      position:absolute; inset:0; overflow:hidden; opacity:0;
+      transform:translateY(100%) scale(.97);
+      transition:transform .62s cubic-bezier(.22,.8,.2,1), opacity .48s ease;
+      will-change:transform,opacity;
+      background:#111;
+    }
+    .scene.active { opacity:1; transform:translateY(0) scale(1); z-index:2; }
+    .scene.prev { opacity:0; transform:translateY(-100%) scale(.98); z-index:1; }
+    .scene.next { opacity:0; transform:translateY(100%) scale(.98); z-index:1; }
+    .scene img {
+      width:100%; height:100%; object-fit:cover;
+      transform:scale(1.035);
+      animation:breath 7s ease-in-out infinite alternate;
+      filter:saturate(.96) contrast(1.02);
+    }
+    .scene:nth-child(2) img { animation-duration:8s; }
+    .scene:nth-child(3) img { animation-duration:6.5s; }
+    @keyframes breath { from{transform:scale(1.035)} to{transform:scale(1.09)} }
+
+    .grain { position:absolute; inset:0; pointer-events:none; opacity:.07;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      mix-blend-mode:screen;
+    }
+    .hint { position:absolute; left:50%; bottom:max(22px, env(safe-area-inset-bottom));
+      transform:translateX(-50%); font-size:12px; letter-spacing:.12em; text-transform:uppercase;
+      opacity:.72; padding:8px 12px; border-radius:20px; background:rgba(0,0,0,.22);
+      backdrop-filter:blur(8px); transition:opacity .4s;
+    }
+    .progress { position:absolute; z-index:10; top:max(10px,env(safe-area-inset-top)); left:12px; right:12px;
+      display:flex; gap:5px; pointer-events:none; }
+    .bar { height:3px; flex:1; border-radius:4px; background:rgba(255,255,255,.32); overflow:hidden; }
+    .bar i { display:block; height:100%; width:0; background:#fff; transition:width .45s ease; }
+    .bar.done i,.bar.current i { width:100%; }
+    .bar.current i { opacity:.9; }
+
+    .gallery { background:#0f0f10; overflow:auto; padding:calc(18px + env(safe-area-inset-top)) 14px calc(24px + env(safe-area-inset-bottom)); align-items:flex-start; }
+    .gallery-inner { width:100%; max-width:720px; margin:auto; }
+    .gallery h1 { margin:10px 4px 5px; font-size:27px; }
+    .gallery p { margin:0 4px 18px; color:#aaa; font-size:14px; }
+    .grid { display:grid; grid-template-columns:repeat(2,1fr); gap:7px; }
+    .tile { aspect-ratio:1/1.15; border-radius:12px; overflow:hidden; background:#242426; }
+    .tile img { width:100%; height:100%; object-fit:cover; display:block; }
+    .empty { min-height:120px; display:flex; align-items:center; justify-content:center; color:#888; font-size:13px; text-align:center; padding:20px; }
+    .back { margin:18px 4px 0; border:0; border-radius:12px; padding:12px 16px; background:#242426; color:#fff; font-size:14px; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div id="story" class="screen story">
+    <div class="progress" id="progress"></div>
+    <section class="scene active"><img src="assets/scene-1.png" draggable="false"><div class="grain"></div></section>
+    <section class="scene next"><img src="assets/scene-2.png" draggable="false"><div class="grain"></div></section>
+    <section class="scene next"><img src="assets/scene-3.png" draggable="false"><div class="grain"></div></section>
+    <div class="hint" id="hint">Свайп вверх / вниз</div>
+  </div>
+
+  <div id="gallery" class="screen gallery" style="display:none">
+    <div class="gallery-inner">
+      <h1>Галерея</h1>
+      <p>Здесь можно разместить фотографии после третьей сцены.</p>
+      <div class="grid">
+        <div class="tile empty">Фото 1</div>
+        <div class="tile empty">Фото 2</div>
+        <div class="tile empty">Фото 3</div>
+        <div class="tile empty">Фото 4</div>
+        <div class="tile empty">Фото 5</div>
+        <div class="tile empty">Фото 6</div>
+      </div>
+      <button class="back" id="back">← Вернуться к сценам</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const tg = window.Telegram?.WebApp;
+  if (tg) { tg.ready(); tg.expand(); }
+
+  const scenes = [...document.querySelectorAll('.scene')];
+  const progress = document.getElementById('progress');
+  const hint = document.getElementById('hint');
+  const story = document.getElementById('story');
+  const gallery = document.getElementById('gallery');
+  const back = document.getElementById('back');
+  let index = 0, startY = 0, startX = 0, moved = false, audioCtx;
+
+  scenes.forEach((_,i) => {
+    const b = document.createElement('div'); b.className='bar';
+    const fill = document.createElement('i'); b.appendChild(fill); progress.appendChild(b);
+  });
+
+  function haptic(style='light') {
+    try { tg?.HapticFeedback?.impactOccurred(style); } catch(e) {}
+    if (navigator.vibrate) navigator.vibrate(style === 'heavy' ? 25 : 12);
+  }
+
+  function sound(kind='tap') {
+    try {
+      audioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+      o.type = kind === 'swipe' ? 'sine' : 'triangle';
+      o.frequency.value = kind === 'swipe' ? 180 : 520;
+      g.gain.setValueAtTime(.0001,audioCtx.currentTime);
+      g.gain.exponentialRampToValueAtTime(.045,audioCtx.currentTime+.008);
+      g.gain.exponentialRampToValueAtTime(.0001,audioCtx.currentTime+.11);
+      o.connect(g).connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime+.12);
+    } catch(e) {}
+  }
+
+  function render() {
+    scenes.forEach((s,i) => {
+      s.classList.remove('active','prev','next');
+      if(i===index) s.classList.add('active');
+      else if(i<index) s.classList.add('prev');
+      else s.classList.add('next');
+    });
+    [...progress.children].forEach((b,i)=>{
+      b.classList.toggle('done',i<index);
+      b.classList.toggle('current',i===index);
+    });
+    hint.style.opacity = index===0 ? '.72' : '0';
+  }
+
+  function go(dir) {
+    const next = index + dir;
+    if(next < 0) return;
+    if(next >= scenes.length) {
+      if (dir > 0) openGallery();
+      return;
+    }
+    index = next; render(); haptic('light'); sound('swipe');
+  }
+
+  function openGallery() {
+    story.style.display='none'; gallery.style.display='flex'; haptic('medium'); sound('swipe');
+  }
+  function closeGallery() {
+    gallery.style.display='none'; story.style.display='flex'; index=2; render();
+  }
+
+  story.addEventListener('touchstart', e => {
+    const t=e.changedTouches[0]; startY=t.clientY; startX=t.clientX; moved=false;
+  }, {passive:true});
+
+  story.addEventListener('touchmove', e => {
+    const t=e.changedTouches[0];
+    if(Math.abs(t.clientY-startY)>12 || Math.abs(t.clientX-startX)>12) moved=true;
+  }, {passive:true});
+
+  story.addEventListener('touchend', e => {
+    const t=e.changedTouches[0], dy=t.clientY-startY, dx=t.clientX-startX;
+    if(Math.abs(dy)>45 && Math.abs(dy)>Math.abs(dx)*1.15) go(dy<0 ? 1 : -1);
+    else if(!moved) { haptic('light'); sound('tap'); }
+  }, {passive:true});
+
+  back.addEventListener('click', closeGallery);
+  render();
+})();
+</script>
+</body>
+</html>
