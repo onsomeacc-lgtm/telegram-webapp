@@ -42,7 +42,14 @@ let index=0, startX=0, deltaX=0, dragging=false;
 function showStories(){
   intro.classList.remove('active'); storiesScreen.classList.add('active'); updateStory();
 }
-start.addEventListener('click',()=>{ unlockAudio(); haptic('light'); showStories(); });
+
+// The first tap is a real user gesture. We use it to unlock the audio engine
+// before moving into the story, so later interaction sounds are not blocked.
+start.addEventListener('pointerup',()=>{
+  unlockAudio();
+  haptic('light');
+  showStories();
+},{once:true});
 
 function updateStory(){
   track.style.transform=`translate3d(${-index*100}%,0,0)`;
@@ -59,16 +66,67 @@ function openGallery(){
   track.style.transform='translate3d(-200%,0,0)';
   setTimeout(()=>{storiesScreen.classList.remove('active');galleryScreen.classList.add('active');},350);
 }
-function interact(el){
-  el.animate([{transform:'scale(1)'},{transform:'scale(.985)'},{transform:'scale(1)'}],{duration:320,easing:'cubic-bezier(.22,1,.36,1)'});
-  haptic('medium'); playClick();
-}
-function haptic(style){try{tg?.HapticFeedback?.impactOccurred(style)}catch(_){} if(navigator.vibrate) navigator.vibrate(style==='light'?12:style==='medium'?22:32)}
 
-let audioCtx;
-function unlockAudio(){
-  try{audioCtx=new (window.AudioContext||window.webkitAudioContext)(); if(audioCtx.state==='suspended') audioCtx.resume();}catch(_){}
+function interact(el){
+  el.animate([{transform:'scale(1)'},{transform:'scale(.975)'},{transform:'scale(1)'}],{duration:320,easing:'cubic-bezier(.22,1,.36,1)'});
+  // Fire both channels: Telegram's native haptic engine and browser vibration
+  // where the host supports it. Sound is triggered from this direct tap.
+  haptic('medium');
+  playClick();
 }
+
+function haptic(style='medium'){
+  try {
+    if (tg?.HapticFeedback) {
+      tg.HapticFeedback.impactOccurred(style);
+    }
+  } catch (_) {}
+
+  // Android browsers / Telegram WebView may expose navigator.vibrate.
+  try {
+    if (typeof navigator.vibrate === 'function') {
+      navigator.vibrate(style==='light' ? [12] : style==='medium' ? [28] : [45]);
+    }
+  } catch (_) {}
+}
+
+let audioCtx = null;
+let masterGain = null;
+
+function unlockAudio(){
+  try {
+    if (!audioCtx) {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+      audioCtx = new AudioContextClass();
+      masterGain = audioCtx.createGain();
+      masterGain.gain.value = 0.8;
+      masterGain.connect(audioCtx.destination);
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } catch (_) {}
+}
+
 function playClick(){
-  try{if(!audioCtx)unlockAudio(); const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type='sine';o.frequency.setValueAtTime(520,audioCtx.currentTime);o.frequency.exponentialRampToValueAtTime(220,audioCtx.currentTime+.07);g.gain.setValueAtTime(.0001,audioCtx.currentTime);g.gain.exponentialRampToValueAtTime(.11,audioCtx.currentTime+.008);g.gain.exponentialRampToValueAtTime(.0001,audioCtx.currentTime+.09);o.connect(g).connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+.1)}catch(_){}
+  try {
+    unlockAudio();
+    if (!audioCtx || !masterGain) return;
+
+    const now = audioCtx.currentTime;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+
+    // A short, clearly audible tactile-style two-tone click.
+    o.type = 'sine';
+    o.frequency.setValueAtTime(620, now);
+    o.frequency.exponentialRampToValueAtTime(280, now + 0.075);
+
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(0.28, now + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+
+    o.connect(g).connect(masterGain);
+    o.start(now);
+    o.stop(now + 0.15);
+  } catch (_) {}
 }
