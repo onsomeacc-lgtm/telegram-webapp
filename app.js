@@ -48,12 +48,12 @@ start.addEventListener('pointerup',()=>{
   showStories();
 },{once:true});
 
-// Every touch on the story or gallery surface produces the tactile response.
-// The symbols are decorative only and have no special interaction.
+// Every touch on the story or gallery surface produces a subtle tactile response.
+// The sound is intentionally soft and airy, like fingertips brushing silk.
 document.addEventListener('pointerdown', (e) => {
   if (!storiesScreen.classList.contains('active') && !galleryScreen.classList.contains('active')) return;
   unlockAudio();
-  haptic('medium');
+  haptic('light');
   playFabricTouch();
 }, {passive:true});
 
@@ -73,9 +73,9 @@ function openGallery(){
   setTimeout(()=>{storiesScreen.classList.remove('active');galleryScreen.classList.add('active');},350);
 }
 
-function haptic(style='medium'){
+function haptic(style='light'){
   try { tg?.HapticFeedback?.impactOccurred(style); } catch (_) {}
-  try { if (typeof navigator.vibrate === 'function') navigator.vibrate(style==='light' ? [12] : [28]); } catch (_) {}
+  try { if (typeof navigator.vibrate === 'function') navigator.vibrate(style==='light' ? [10] : [20]); } catch (_) {}
 }
 
 let audioCtx = null;
@@ -89,7 +89,7 @@ function unlockAudio(){
     if (!audioCtx) {
       audioCtx = new AudioContextClass();
       masterGain = audioCtx.createGain();
-      masterGain.gain.value = 0.9;
+      masterGain.gain.value = 0.32;
       masterGain.connect(audioCtx.destination);
       createFabricNoiseBuffer();
     }
@@ -97,19 +97,20 @@ function unlockAudio(){
   } catch (_) {}
 }
 
-// Procedural fabric sound: filtered short noise + soft low thump.
-// It avoids loading another binary asset while sounding like fingers brushing wool.
+// Airy silk texture: very short filtered noise with a feather-light envelope.
+// No low thump — the old bass hit made the interaction feel heavy and mechanical.
 function createFabricNoiseBuffer(){
   if (!audioCtx) return;
-  const length = Math.floor(audioCtx.sampleRate * 0.22);
+  const length = Math.floor(audioCtx.sampleRate * 0.13);
   noiseBuffer = audioCtx.createBuffer(1, length, audioCtx.sampleRate);
   const data = noiseBuffer.getChannelData(0);
   let last = 0;
   for (let i=0;i<length;i++) {
     const white = Math.random() * 2 - 1;
-    last = last * 0.72 + white * 0.28;
-    const envelope = Math.exp(-i / (audioCtx.sampleRate * 0.075));
-    data[i] = last * envelope * 0.8;
+    last = last * 0.84 + white * 0.16;
+    const attack = Math.min(1, i / (audioCtx.sampleRate * 0.008));
+    const release = Math.exp(-i / (audioCtx.sampleRate * 0.045));
+    data[i] = last * attack * release * 0.75;
   }
 }
 
@@ -121,28 +122,28 @@ function playFabricTouch(){
 
     const source = audioCtx.createBufferSource();
     source.buffer = noiseBuffer;
-    const filter = audioCtx.createBiquadFilter();
-    const gain = audioCtx.createGain();
-    filter.type = 'bandpass';
-    filter.frequency.setValueAtTime(1800, now);
-    filter.Q.value = 0.65;
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.34, now + 0.008);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.19);
-    source.connect(filter).connect(gain).connect(masterGain);
-    source.start(now);
-    source.stop(now + 0.21);
 
-    const thump = audioCtx.createOscillator();
-    const thumpGain = audioCtx.createGain();
-    thump.type = 'sine';
-    thump.frequency.setValueAtTime(105, now);
-    thump.frequency.exponentialRampToValueAtTime(72, now + 0.09);
-    thumpGain.gain.setValueAtTime(0.0001, now);
-    thumpGain.gain.exponentialRampToValueAtTime(0.075, now + 0.006);
-    thumpGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
-    thump.connect(thumpGain).connect(masterGain);
-    thump.start(now);
-    thump.stop(now + 0.12);
+    const highpass = audioCtx.createBiquadFilter();
+    highpass.type = 'highpass';
+    highpass.frequency.setValueAtTime(900, now);
+
+    const lowpass = audioCtx.createBiquadFilter();
+    lowpass.type = 'lowpass';
+    lowpass.frequency.setValueAtTime(5200, now);
+
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.16, now + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+
+    source.connect(highpass).connect(lowpass).connect(gain).connect(masterGain);
+    source.start(now);
+    source.stop(now + 0.13);
+    source.onended = () => {
+      source.disconnect();
+      highpass.disconnect();
+      lowpass.disconnect();
+      gain.disconnect();
+    };
   } catch (_) {}
 }
