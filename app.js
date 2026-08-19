@@ -25,7 +25,6 @@ const grid=document.querySelector('#galleryGrid');
 stories.forEach((s)=>{
   const el=document.createElement('article'); el.className='story';
   el.innerHTML=`<img src="${s.image}" alt="" draggable="false"><div class="story-content"><h2 class="story-title">${s.title.replaceAll('\n','<br>')}</h2><button class="story-action" aria-label="Взаимодействовать"><span>${s.action}</span></button></div>`;
-  // The symbols are visual only. Sound/haptic is handled globally for every touch.
   track.appendChild(el);
   const p=document.createElement('i'); p.innerHTML='<b></b>'; progress.appendChild(p);
 });
@@ -43,20 +42,19 @@ function showStories(){
   intro.classList.remove('active'); storiesScreen.classList.add('active'); updateStory();
 }
 
-// The first tap is a real user gesture. It unlocks audio before entering the story.
 start.addEventListener('pointerup',()=>{
   unlockAudio();
   haptic('light');
   showStories();
 },{once:true});
 
-// Every touch anywhere in the active app produces the requested sound + haptic.
-// This is intentionally global: the story symbols themselves are not special controls.
+// Every touch on the story or gallery surface produces the tactile response.
+// The symbols are decorative only and have no special interaction.
 document.addEventListener('pointerdown', (e) => {
   if (!storiesScreen.classList.contains('active') && !galleryScreen.classList.contains('active')) return;
-  if (!audioCtx) unlockAudio();
+  unlockAudio();
   haptic('medium');
-  playClick();
+  playFabricTouch();
 }, {passive:true});
 
 function updateStory(){
@@ -76,55 +74,75 @@ function openGallery(){
 }
 
 function haptic(style='medium'){
-  try {
-    if (tg?.HapticFeedback) {
-      tg.HapticFeedback.impactOccurred(style);
-    }
-  } catch (_) {}
-
-  try {
-    if (typeof navigator.vibrate === 'function') {
-      navigator.vibrate(style==='light' ? [12] : style==='medium' ? [28] : [45]);
-    }
-  } catch (_) {}
+  try { tg?.HapticFeedback?.impactOccurred(style); } catch (_) {}
+  try { if (typeof navigator.vibrate === 'function') navigator.vibrate(style==='light' ? [12] : [28]); } catch (_) {}
 }
 
 let audioCtx = null;
 let masterGain = null;
+let noiseBuffer = null;
 
 function unlockAudio(){
   try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
     if (!audioCtx) {
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContextClass) return;
       audioCtx = new AudioContextClass();
       masterGain = audioCtx.createGain();
-      masterGain.gain.value = 0.8;
+      masterGain.gain.value = 0.9;
       masterGain.connect(audioCtx.destination);
+      createFabricNoiseBuffer();
     }
     if (audioCtx.state === 'suspended') audioCtx.resume();
   } catch (_) {}
 }
 
-function playClick(){
+// Procedural fabric sound: filtered short noise + soft low thump.
+// It avoids loading another binary asset while sounding like fingers brushing wool.
+function createFabricNoiseBuffer(){
+  if (!audioCtx) return;
+  const length = Math.floor(audioCtx.sampleRate * 0.22);
+  noiseBuffer = audioCtx.createBuffer(1, length, audioCtx.sampleRate);
+  const data = noiseBuffer.getChannelData(0);
+  let last = 0;
+  for (let i=0;i<length;i++) {
+    const white = Math.random() * 2 - 1;
+    last = last * 0.72 + white * 0.28;
+    const envelope = Math.exp(-i / (audioCtx.sampleRate * 0.075));
+    data[i] = last * envelope * 0.8;
+  }
+}
+
+function playFabricTouch(){
   try {
     unlockAudio();
-    if (!audioCtx || !masterGain) return;
-
+    if (!audioCtx || !masterGain || !noiseBuffer) return;
     const now = audioCtx.currentTime;
-    const o = audioCtx.createOscillator();
-    const g = audioCtx.createGain();
 
-    o.type = 'sine';
-    o.frequency.setValueAtTime(620, now);
-    o.frequency.exponentialRampToValueAtTime(280, now + 0.075);
+    const source = audioCtx.createBufferSource();
+    source.buffer = noiseBuffer;
+    const filter = audioCtx.createBiquadFilter();
+    const gain = audioCtx.createGain();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(1800, now);
+    filter.Q.value = 0.65;
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.34, now + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.19);
+    source.connect(filter).connect(gain).connect(masterGain);
+    source.start(now);
+    source.stop(now + 0.21);
 
-    g.gain.setValueAtTime(0.0001, now);
-    g.gain.exponentialRampToValueAtTime(0.28, now + 0.006);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
-
-    o.connect(g).connect(masterGain);
-    o.start(now);
-    o.stop(now + 0.15);
+    const thump = audioCtx.createOscillator();
+    const thumpGain = audioCtx.createGain();
+    thump.type = 'sine';
+    thump.frequency.setValueAtTime(105, now);
+    thump.frequency.exponentialRampToValueAtTime(72, now + 0.09);
+    thumpGain.gain.setValueAtTime(0.0001, now);
+    thumpGain.gain.exponentialRampToValueAtTime(0.075, now + 0.006);
+    thumpGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
+    thump.connect(thumpGain).connect(masterGain);
+    thump.start(now);
+    thump.stop(now + 0.12);
   } catch (_) {}
 }
