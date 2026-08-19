@@ -25,7 +25,7 @@ const grid=document.querySelector('#galleryGrid');
 stories.forEach((s)=>{
   const el=document.createElement('article'); el.className='story';
   el.innerHTML=`<img src="${s.image}" alt="" draggable="false"><div class="story-content"><h2 class="story-title">${s.title.replaceAll('\n','<br>')}</h2><button class="story-action" aria-label="Взаимодействовать"><span>${s.action}</span></button></div>`;
-  el.querySelector('button').addEventListener('click',e=>{e.stopPropagation(); interact(el);});
+  // The symbols are visual only. Sound/haptic is handled globally for every touch.
   track.appendChild(el);
   const p=document.createElement('i'); p.innerHTML='<b></b>'; progress.appendChild(p);
 });
@@ -43,13 +43,21 @@ function showStories(){
   intro.classList.remove('active'); storiesScreen.classList.add('active'); updateStory();
 }
 
-// The first tap is a real user gesture. We use it to unlock the audio engine
-// before moving into the story, so later interaction sounds are not blocked.
+// The first tap is a real user gesture. It unlocks audio before entering the story.
 start.addEventListener('pointerup',()=>{
   unlockAudio();
   haptic('light');
   showStories();
 },{once:true});
+
+// Every touch anywhere in the active app produces the requested sound + haptic.
+// This is intentionally global: the story symbols themselves are not special controls.
+document.addEventListener('pointerdown', (e) => {
+  if (!storiesScreen.classList.contains('active') && !galleryScreen.classList.contains('active')) return;
+  if (!audioCtx) unlockAudio();
+  haptic('medium');
+  playClick();
+}, {passive:true});
 
 function updateStory(){
   track.style.transform=`translate3d(${-index*100}%,0,0)`;
@@ -59,20 +67,12 @@ function updateStory(){
 
 track.addEventListener('pointerdown',e=>{dragging=true;startX=e.clientX;deltaX=0;track.setPointerCapture?.(e.pointerId)});
 track.addEventListener('pointermove',e=>{if(!dragging)return;deltaX=e.clientX-startX;track.style.transform=`translate3d(calc(${-index*100}% + ${deltaX}px),0,0)`});
-track.addEventListener('pointerup',()=>{if(!dragging)return;dragging=false;if(Math.abs(deltaX)>55){if(deltaX<0 && index<2) index++;else if(deltaX>0 && index>0) index--;else if(deltaX<0 && index===2){openGallery();return;}} updateStory(); haptic('light')});
+track.addEventListener('pointerup',()=>{if(!dragging)return;dragging=false;if(Math.abs(deltaX)>55){if(deltaX<0 && index<2) index++;else if(deltaX>0 && index>0) index--;else if(deltaX<0 && index===2){openGallery();return;}} updateStory()});
 track.addEventListener('pointercancel',()=>{dragging=false;updateStory()});
 
 function openGallery(){
   track.style.transform='translate3d(-200%,0,0)';
   setTimeout(()=>{storiesScreen.classList.remove('active');galleryScreen.classList.add('active');},350);
-}
-
-function interact(el){
-  el.animate([{transform:'scale(1)'},{transform:'scale(.975)'},{transform:'scale(1)'}],{duration:320,easing:'cubic-bezier(.22,1,.36,1)'});
-  // Fire both channels: Telegram's native haptic engine and browser vibration
-  // where the host supports it. Sound is triggered from this direct tap.
-  haptic('medium');
-  playClick();
 }
 
 function haptic(style='medium'){
@@ -82,7 +82,6 @@ function haptic(style='medium'){
     }
   } catch (_) {}
 
-  // Android browsers / Telegram WebView may expose navigator.vibrate.
   try {
     if (typeof navigator.vibrate === 'function') {
       navigator.vibrate(style==='light' ? [12] : style==='medium' ? [28] : [45]);
@@ -116,7 +115,6 @@ function playClick(){
     const o = audioCtx.createOscillator();
     const g = audioCtx.createGain();
 
-    // A short, clearly audible tactile-style two-tone click.
     o.type = 'sine';
     o.frequency.setValueAtTime(620, now);
     o.frequency.exponentialRampToValueAtTime(280, now + 0.075);
