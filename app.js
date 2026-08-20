@@ -7,9 +7,9 @@ if (tg) {
 }
 
 const stories = [
-  {image:'./assets/story-01.svg', title:'место\nначинается\nс ощущения', action:'✦'},
-  {image:'./assets/story-02.svg', title:'свет остаётся\nдаже когда\nего не видно', action:'↗'},
-  {image:'./assets/story-03.svg', title:'а теперь\nможно просто\nсмотреть', action:'○'}
+  {image:'./assets/story-01.svg', title:'место\nначинается\nс ощущения', action:'✦', sound:'./assets/tkan1.mp3'},
+  {image:'./assets/story-02.svg', title:'свет остаётся\nдаже когда\nего не видно', action:'↗', sound:'./assets/trava2.mp3'},
+  {image:'./assets/story-03.svg', title:'а теперь\nможно просто\nсмотреть', action:'○', sound:'./assets/pesok3.mp3'}
 ];
 const gallery = Array.from({length:15},(_,i)=>`./assets/photo-${String(i+1).padStart(2,'0')}.svg`);
 
@@ -22,11 +22,19 @@ const progress=document.querySelector('#storyProgress');
 const counter=document.querySelector('#storyCounter');
 const grid=document.querySelector('#galleryGrid');
 
+// Custom sounds: story 1 -> tkan1, story 2 -> trava2, story 3 -> pesok3.
+const storySounds = stories.map((story) => {
+  const audio = new Audio(story.sound);
+  audio.preload = 'auto';
+  return audio;
+});
+
 stories.forEach((s)=>{
   const el=document.createElement('article'); el.className='story';
   el.innerHTML=`<img src="${s.image}" alt="" draggable="false"><div class="story-content"><h2 class="story-title">${s.title.replaceAll('\n','<br>')}</h2><button class="story-action" aria-label="Взаимодействовать"><span>${s.action}</span></button></div>`;
   track.appendChild(el);
   const p=document.createElement('i'); p.innerHTML='<b></b>'; progress.appendChild(p);
+  
 });
 
 gallery.forEach((src,i)=>{
@@ -48,14 +56,22 @@ start.addEventListener('pointerup',()=>{
   showStories();
 },{once:true});
 
-// Every touch on the story or gallery surface produces a subtle tactile response.
-// The sound is intentionally soft and airy, like fingertips brushing silk.
-document.addEventListener('pointerdown', (e) => {
-  if (!storiesScreen.classList.contains('active') && !galleryScreen.classList.contains('active')) return;
+// Play the custom sound belonging to the currently visible story.
+document.addEventListener('pointerdown', () => {
+  if (!storiesScreen.classList.contains('active')) return;
   unlockAudio();
   haptic('light');
-  playFabricTouch();
+  playStorySound(index);
 }, {passive:true});
+
+function playStorySound(storyIndex){
+  try {
+    const audio = storySounds[storyIndex];
+    if (!audio) return;
+    audio.currentTime = 0;
+    audio.play().catch(() => {});
+  } catch (_) {}
+}
 
 function updateStory(){
   track.style.transform=`translate3d(${-index*100}%,0,0)`;
@@ -78,72 +94,13 @@ function haptic(style='light'){
   try { if (typeof navigator.vibrate === 'function') navigator.vibrate(style==='light' ? [10] : [20]); } catch (_) {}
 }
 
-let audioCtx = null;
-let masterGain = null;
-let noiseBuffer = null;
-
+// Unlock audio playback after the first user gesture. The actual story sounds
+// are external files in ./assets/ and are no longer synthesized by Web Audio.
+let audioUnlocked = false;
 function unlockAudio(){
-  try {
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextClass) return;
-    if (!audioCtx) {
-      audioCtx = new AudioContextClass();
-      masterGain = audioCtx.createGain();
-      masterGain.gain.value = 0.32;
-      masterGain.connect(audioCtx.destination);
-      createFabricNoiseBuffer();
-    }
-    if (audioCtx.state === 'suspended') audioCtx.resume();
-  } catch (_) {}
-}
-
-// Airy silk texture: very short filtered noise with a feather-light envelope.
-// No low thump — the old bass hit made the interaction feel heavy and mechanical.
-function createFabricNoiseBuffer(){
-  if (!audioCtx) return;
-  const length = Math.floor(audioCtx.sampleRate * 0.13);
-  noiseBuffer = audioCtx.createBuffer(1, length, audioCtx.sampleRate);
-  const data = noiseBuffer.getChannelData(0);
-  let last = 0;
-  for (let i=0;i<length;i++) {
-    const white = Math.random() * 2 - 1;
-    last = last * 0.84 + white * 0.16;
-    const attack = Math.min(1, i / (audioCtx.sampleRate * 0.008));
-    const release = Math.exp(-i / (audioCtx.sampleRate * 0.045));
-    data[i] = last * attack * release * 0.75;
-  }
-}
-
-function playFabricTouch(){
-  try {
-    unlockAudio();
-    if (!audioCtx || !masterGain || !noiseBuffer) return;
-    const now = audioCtx.currentTime;
-
-    const source = audioCtx.createBufferSource();
-    source.buffer = noiseBuffer;
-
-    const highpass = audioCtx.createBiquadFilter();
-    highpass.type = 'highpass';
-    highpass.frequency.setValueAtTime(900, now);
-
-    const lowpass = audioCtx.createBiquadFilter();
-    lowpass.type = 'lowpass';
-    lowpass.frequency.setValueAtTime(5200, now);
-
-    const gain = audioCtx.createGain();
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.16, now + 0.012);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
-
-    source.connect(highpass).connect(lowpass).connect(gain).connect(masterGain);
-    source.start(now);
-    source.stop(now + 0.13);
-    source.onended = () => {
-      source.disconnect();
-      highpass.disconnect();
-      lowpass.disconnect();
-      gain.disconnect();
-    };
-  } catch (_) {}
+  if (audioUnlocked) return;
+  audioUnlocked = true;
+  storySounds.forEach((audio) => {
+    try { audio.load(); } catch (_) {}
+  });
 }
