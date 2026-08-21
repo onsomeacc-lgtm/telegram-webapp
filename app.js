@@ -9,7 +9,7 @@ if (tg) {
 const stories = [
   {image:'./assets/story-01.svg', title:'место\nначинается\nс ощущения', action:'✦', sound:'./assets/tkan1.mp3'},
   {image:'./assets/grass.jpg', title:'свет остаётся\nдаже когда\nего не видно', action:'↗', sound:'./assets/trava2.mp3'},
-  {image:'./assets/sand.png', title:'а теперь\nможно просто\nсмотреть', action:'○', sound:'./assets/pesok3.mp3'}
+  {image:'./assets/sand3.jpg', title:'а теперь\nможно просто\nсмотреть', action:'○', sound:'./assets/pesok3.mp3'}
 ];
 const gallery = Array.from({length:15},(_,i)=>`./assets/photo-${String(i+1).padStart(2,'0')}.svg`);
 
