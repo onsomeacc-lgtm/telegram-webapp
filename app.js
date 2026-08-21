@@ -11,7 +11,16 @@ const stories = [
   {image:'./assets/grass.jpg', title:'свет остаётся\nдаже когда\nего не видно', action:'↗', sound:'./assets/trava2.mp3'},
   {image:'./assets/sand3.jpg', title:'а теперь\nможно просто\nсмотреть', action:'○', sound:'./assets/pesok3.mp3'}
 ];
-const gallery = Array.from({length:15},(_,i)=>`./assets/photo-${String(i+1).padStart(2,'0')}.svg`);
+const gallery = [
+  './assets/gallery/55362965963_c670475b61_o.jpg',
+  './assets/gallery/55362966458_a7fe009864_k.jpg',
+  './assets/gallery/55408618546_73655e5bf2_b.jpg',
+  './assets/gallery/55408735368_5bcdbd95c0_b.jpg',
+  './assets/gallery/55420000651_fc4e00c610_6k.jpg',
+  './assets/gallery/55425794394_0816329958_o.jpg',
+  './assets/gallery/55426018275_eb9e50ba27_o.jpg',
+  './assets/gallery/55428295814_60989fbb19_o.jpg'
+];
 
 const intro=document.querySelector('#intro');
 const start=document.querySelector('#start');
