@@ -8,8 +8,8 @@ if (tg) {
 
 const stories = [
   {image:'./assets/story-01.svg', title:'место\nначинается\nс ощущения', action:'✦', sound:'./assets/tkan1.mp3'},
-  {image:'./assets/story-02.svg', title:'свет остаётся\nдаже когда\nего не видно', action:'↗', sound:'./assets/trava2.mp3'},
-  {image:'./assets/story-03.svg', title:'а теперь\nможно просто\nсмотреть', action:'○', sound:'./assets/pesok3.mp3'}
+  {image:'./assets/grass.jpg', title:'свет остаётся\nдаже когда\nего не видно', action:'↗', sound:'./assets/trava2.mp3'},
+  {image:'./assets/sand.png', title:'а теперь\nможно просто\nсмотреть', action:'○', sound:'./assets/pesok3.mp3'}
 ];
 const gallery = Array.from({length:15},(_,i)=>`./assets/photo-${String(i+1).padStart(2,'0')}.svg`);
 
@@ -55,8 +55,6 @@ start.addEventListener('pointerup',()=>{
   showStories();
 },{once:true});
 
-// Sound and vibration live only while the finger is physically on the screen.
-// While dragging, the current story sound is kept alive and haptics pulse with movement.
 track.addEventListener('pointerdown', (e) => {
   pressed = true;
   startX = e.clientX;
@@ -101,8 +99,6 @@ function startStoryInteraction(){
 }
 
 function pulseHapticOnMove(){
-  // The repeating light haptic is intentionally tied to pointer movement.
-  // Telegram's native haptic API does not expose continuous vibration intensity.
   haptic('light');
 }
 
