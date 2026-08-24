@@ -53,6 +53,7 @@ gallery.forEach((src,i)=>{
 document.querySelector('#galleryCount').textContent=`${gallery.length} фото`;
 let index=0, startX=0, deltaX=0, dragging=false;
 let pressed=false;
+let activeStory=null;
 let hapticInterval=null;
 
 function showStories(){
@@ -68,7 +69,10 @@ track.addEventListener('pointerdown', (e) => {
   pressed = true;
   startX = e.clientX;
   deltaX = 0;
+  activeStory = [...track.children][index];
   track.setPointerCapture?.(e.pointerId);
+  setPressPoint(e);
+  activeStory?.classList.add('is-pressed');
   unlockAudio();
   startStoryInteraction();
 });
@@ -77,10 +81,36 @@ track.addEventListener('pointermove', (e) => {
   if (!pressed) return;
   deltaX = e.clientX - startX;
   track.style.transform=`translate3d(calc(${-index*100}% + ${deltaX}px),0,0)`;
+  if (Math.abs(deltaX) < 55) setPressPoint(e);
   pulseHapticOnMove();
 });
 
+function setPressPoint(e){
+  if (!activeStory) return;
+  const rect=activeStory.getBoundingClientRect();
+  const x=Math.max(0,Math.min(100,((e.clientX-rect.left)/rect.width)*100));
+  const y=Math.max(0,Math.min(100,((e.clientY-rect.top)/rect.height)*100));
+  const nx=(x-50)/50;
+  const ny=(y-50)/50;
+  activeStory.style.setProperty('--press-origin-x',`${x}%`);
+  activeStory.style.setProperty('--press-origin-y',`${y}%`);
+  activeStory.style.setProperty('--press-x-pos',`${x}%`);
+  activeStory.style.setProperty('--press-y-pos',`${y}%`);
+  activeStory.style.setProperty('--press-x',`${(ny * -1.6).toFixed(2)}deg`);
+  activeStory.style.setProperty('--press-y',`${(nx * 1.9).toFixed(2)}deg`);
+}
+
+function releasePress(){
+  if (!activeStory) return;
+  activeStory.classList.remove('is-pressed');
+  activeStory.style.setProperty('--press-x','0deg');
+  activeStory.style.setProperty('--press-y','0deg');
+  activeStory.style.setProperty('--press-scale','1');
+  activeStory=null;
+}
+
 function endStoryInteraction(){
+  releasePress();
   pressed = false;
   stopStorySound();
   stopHaptic();
@@ -134,6 +164,7 @@ function stopStorySound(){
 
 function updateStory(){
   stopStorySound();
+  releasePress();
   track.style.transform=`translate3d(${-index*100}%,0,0)`;
   [...progress.children].forEach((p,i)=>p.classList.toggle('active',i<=index));
   counter.textContent=`${String(index+1).padStart(2,'0')} / 03`;
@@ -142,6 +173,7 @@ function updateStory(){
 function openGallery(){
   stopStorySound();
   stopHaptic();
+  releasePress();
   track.style.transform='translate3d(-200%,0,0)';
   setTimeout(()=>{storiesScreen.classList.remove('active');galleryScreen.classList.add('active');},350);
 }
