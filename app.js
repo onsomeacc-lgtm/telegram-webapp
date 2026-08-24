@@ -7,9 +7,9 @@ if (tg) {
 }
 
 const stories = [
-  {image:'./assets/story-01.svg', title:'место\nначинается\nс ощущения', action:'✦', sound:'./assets/tkan1.mp3'},
-  {image:'./assets/grass.jpg', title:'свет остаётся\nдаже когда\nего не видно', action:'↗', sound:'./assets/trava2.mp3'},
-  {image:'./assets/sand3.jpg', title:'а теперь\nможно просто\nсмотреть', action:'○', sound:'./assets/pesok3.mp3'}
+  {image:'./assets/story-01.svg', title:'Так хочется потрогать!\nЛучше — с включенным звуком.', action:'✦', sound:'./assets/tkan1.mp3'},
+  {image:'./assets/grass.jpg', title:'Так хочется потрогать!\nЛучше — с включенным звуком.', action:'↗', sound:'./assets/trava2.mp3'},
+  {image:'./assets/sand3.jpg', title:'Так хочется потрогать!\nЛучше — с включенным звуком.', action:'○', sound:'./assets/pesok3.mp3'}
 ];
 const gallery = [
   './assets/gallery/55362965963_c670475b61_o.jpg',
@@ -57,13 +57,20 @@ let activeStory=null;
 let hapticInterval=null;
 
 function showStories(){
-  intro.classList.remove('active'); storiesScreen.classList.add('active'); updateStory();
+  intro?.classList.remove('active');
+  storiesScreen?.classList.add('active');
+  updateStory();
 }
 
-start.addEventListener('pointerup',()=>{
-  unlockAudio();
-  showStories();
-},{once:true});
+// История теперь начинается сразу, без вступительного белого экрана.
+showStories();
+
+if (start) {
+  start.addEventListener('pointerup',()=>{
+    unlockAudio();
+    showStories();
+  },{once:true});
+}
 
 track.addEventListener('pointerdown', (e) => {
   pressed = true;
